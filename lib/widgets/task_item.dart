@@ -472,7 +472,7 @@ class _TaskItemState extends State<TaskItem> {
                               const Icon(Icons.checklist, size: 14, color: AppTheme.primaryColor),
                               const SizedBox(width: 4),
                               Text(
-                                '$completedSubtasksCount/${widget.task.subtasks.length}',
+                                '${widget.task.completionPercentage}% • $completedSubtasksCount/${widget.task.subtasks.length}',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
@@ -506,7 +506,7 @@ class _TaskItemState extends State<TaskItem> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Subtasks header with progress
+                        // Subtasks header with progress (calculated by hours)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -524,13 +524,34 @@ class _TaskItemState extends State<TaskItem> {
                                 ),
                               ],
                             ),
-                            Text(
-                              '${((completedSubtasksCount / widget.task.subtasks.length) * 100).toInt()}%',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.primaryColor,
-                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '${Task.formatMinutes(widget.task.completedSubtasksPlannedMinutes)} / ${Task.formatMinutes(widget.task.totalSubtasksPlannedMinutes)}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white60 : Colors.black54,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${widget.task.completionPercentage}%',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -538,9 +559,7 @@ class _TaskItemState extends State<TaskItem> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: LinearProgressIndicator(
-                            value: widget.task.subtasks.isEmpty
-                                ? 0
-                                : (completedSubtasksCount / widget.task.subtasks.length),
+                            value: widget.task.completionProgress,
                             minHeight: 5,
                             backgroundColor: isDark ? Colors.white12 : Colors.black12,
                             valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.accentSuccess),
@@ -611,15 +630,13 @@ class _TaskItemState extends State<TaskItem> {
                                     // Subtask allocated time badge (explicit or proportional)
                                     Builder(
                                       builder: (context) {
-                                        final int subAllocatedMins = (sub.durationMinutes != null && sub.durationMinutes! > 0)
-                                            ? sub.durationMinutes!
-                                            : (widget.task.subtasks.isNotEmpty
-                                                ? (widget.task.effectiveMinutes / widget.task.subtasks.length).round()
-                                                : 0);
+                                        final int subAllocatedMins = widget.task.subtaskAllocatedMinutes(sub);
 
                                         if (subAllocatedMins <= 0) return const SizedBox.shrink();
 
                                         final badgeColor = sub.isCompleted ? AppTheme.accentSuccess : AppTheme.primaryColor;
+                                        final totalMins = widget.task.totalSubtasksPlannedMinutes;
+                                        final sharePct = totalMins > 0 ? ((subAllocatedMins / totalMins) * 100).round() : 0;
 
                                         return Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -641,7 +658,7 @@ class _TaskItemState extends State<TaskItem> {
                                                   ),
                                                   const SizedBox(width: 3),
                                                   Text(
-                                                    Task.formatMinutes(subAllocatedMins),
+                                                    '${Task.formatMinutes(subAllocatedMins)} ($sharePct%)',
                                                     style: TextStyle(
                                                       fontSize: 11,
                                                       fontWeight: FontWeight.bold,

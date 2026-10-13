@@ -172,26 +172,62 @@ class Task {
     return effectiveMinutes;
   }
 
-  // Progress ratio from 0.0 to 1.0 (considers subtasks if not fully completed)
+  // Subtask allocated minutes (uses explicit duration, or evenly distributes task's planned hours)
+  int subtaskAllocatedMinutes(SubTask sub) {
+    if (sub.durationMinutes != null && sub.durationMinutes! > 0) {
+      return sub.durationMinutes!;
+    }
+    if (subtasks.isNotEmpty) {
+      final explicitTotal = subtasks
+          .where((s) => s.durationMinutes != null && s.durationMinutes! > 0)
+          .fold<int>(0, (sum, s) => sum + s.durationMinutes!);
+      final unassignedCount = subtasks
+          .where((s) => s.durationMinutes == null || s.durationMinutes! <= 0)
+          .length;
+      if (unassignedCount > 0) {
+        final remaining = effectiveMinutes - explicitTotal;
+        if (remaining > 0) {
+          final share = (remaining / unassignedCount).round();
+          return share > 0 ? share : 1;
+        }
+      }
+      final fallbackShare = (effectiveMinutes / subtasks.length).round();
+      return fallbackShare > 0 ? fallbackShare : 1;
+    }
+    return 0;
+  }
+
+  // Total planned minutes across all subtasks
+  int get totalSubtasksPlannedMinutes {
+    if (subtasks.isEmpty) return 0;
+    return subtasks.fold<int>(0, (sum, s) => sum + subtaskAllocatedMinutes(s));
+  }
+
+  // Completed planned minutes across completed subtasks
+  int get completedSubtasksPlannedMinutes {
+    if (subtasks.isEmpty) return 0;
+    return subtasks
+        .where((s) => s.isCompleted)
+        .fold<int>(0, (sum, s) => sum + subtaskAllocatedMinutes(s));
+  }
+
+  // Completion percentage strictly calculated by hours (0 to 100)
+  int get completionPercentage => (completionProgress * 100).round();
+
+  // Progress ratio from 0.0 to 1.0 (strictly calculated by hours / time duration)
   double get completionProgress {
     if (isCompleted) return 1.0;
     if (subtasks.isEmpty) return 0.0;
 
-    final hasExplicitSubtaskDurations = subtasks.any((s) => s.durationMinutes != null && s.durationMinutes! > 0);
-    if (hasExplicitSubtaskDurations) {
-      final defaultSlice = (effectiveMinutes / subtasks.length).round();
-      final totalMinutes = subtasks.fold<int>(0, (sum, s) => sum + (s.durationMinutes ?? defaultSlice));
-      if (totalMinutes > 0) {
-        final doneMinutes = subtasks.where((s) => s.isCompleted).fold<int>(0, (sum, s) => sum + (s.durationMinutes ?? defaultSlice));
-        return (doneMinutes / totalMinutes).clamp(0.0, 1.0);
-      }
+    final totalMins = totalSubtasksPlannedMinutes;
+    if (totalMins > 0) {
+      return (completedSubtasksPlannedMinutes / totalMins).clamp(0.0, 1.0);
     }
-
     final done = subtasks.where((s) => s.isCompleted).length;
     return (done / subtasks.length).clamp(0.0, 1.0);
   }
 
-  // Productive minutes achieved for this task (full if completed, or proportional to finished subtasks)
+  // Productive minutes achieved for this task (full if completed, or proportional to finished subtasks by hours)
   double get effectiveProductiveMinutesAchieved {
     if (isCompleted) {
       return (actualDurationMinutes != null && actualDurationMinutes! > 0)
@@ -199,37 +235,23 @@ class Task {
           : effectiveMinutes.toDouble();
     }
     if (subtasks.isNotEmpty) {
-      final hasExplicitSubtaskDurations = subtasks.any((s) => s.durationMinutes != null && s.durationMinutes! > 0);
-      if (hasExplicitSubtaskDurations) {
-        final defaultSlice = (effectiveMinutes / subtasks.length).round();
-        final doneMinutes = subtasks.where((s) => s.isCompleted).fold<int>(0, (sum, s) => sum + (s.durationMinutes ?? defaultSlice));
-        return doneMinutes.toDouble();
-      }
-
       final ratio = completionProgress;
       if (ratio > 0) {
-        return effectiveProductiveMinutes * ratio;
+        return (effectiveProductiveMinutes * ratio).clamp(0.0, effectiveProductiveMinutes.toDouble());
       }
     }
     return 0.0;
   }
 
-  // Planned minutes achieved (for productivity rate calculation)
+  // Planned minutes achieved (for productivity rate calculation by hours)
   double get effectivePlannedMinutesAchieved {
     if (isCompleted) {
       return effectiveMinutes.toDouble();
     }
     if (subtasks.isNotEmpty) {
-      final hasExplicitSubtaskDurations = subtasks.any((s) => s.durationMinutes != null && s.durationMinutes! > 0);
-      if (hasExplicitSubtaskDurations) {
-        final defaultSlice = (effectiveMinutes / subtasks.length).round();
-        final doneMinutes = subtasks.where((s) => s.isCompleted).fold<int>(0, (sum, s) => sum + (s.durationMinutes ?? defaultSlice));
-        return doneMinutes.toDouble();
-      }
-
       final ratio = completionProgress;
       if (ratio > 0) {
-        return effectiveMinutes * ratio;
+        return (effectiveMinutes * ratio).clamp(0.0, effectiveMinutes.toDouble());
       }
     }
     return 0.0;
