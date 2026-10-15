@@ -56,6 +56,8 @@ class TaskService extends ChangeNotifier {
     if (currentId != _activeUserId) {
       _activeUserId = currentId;
       _firestoreSubscription?.cancel();
+      _tasks = [];
+      notifyListeners();
       loadTasks();
     }
   }
@@ -78,15 +80,17 @@ class TaskService extends ChangeNotifier {
     try {
       // Step 1: Load from SharedPreferences first (offline-first & instant UI)
       final prefs = await SharedPreferences.getInstance();
-      final List<String>? rawList = prefs.getStringList(_storageKey) ??
-          prefs.getStringList(_defaultStorageKey);
+      final List<String>? rawList = _activeUserId != null
+          ? prefs.getStringList(_storageKey)
+          : prefs.getStringList(_defaultStorageKey);
 
       if (rawList != null && rawList.isNotEmpty) {
-        _tasks = rawList.map((str) => Task.fromJson(str)).toList();
+        _tasks = rawList
+            .map((str) => Task.fromJson(str))
+            .where((t) => !_isStarterDummyTask(t))
+            .toList();
       } else {
-        // Starter onboarding tasks for new users
-        _tasks = _getStarterTasks();
-        await _saveToPrefs();
+        _tasks = [];
       }
 
       // Step 2: If Firestore and User are available, bind real-time sync
@@ -107,30 +111,40 @@ class TaskService extends ChangeNotifier {
     _firestoreSubscription = collection.snapshots().listen(
       (snapshot) async {
         if (snapshot.docs.isEmpty) {
-          // New remote collection: seed local starter tasks if available
-          if (_tasks.isNotEmpty) {
-            final batch = _firestore?.batch();
-            if (batch != null) {
-              for (final t in _tasks) {
-                batch.set(collection.doc(t.id), t.toMap());
-              }
-              try {
-                await batch.commit();
-              } catch (e) {
-                debugPrint('Error seeding starter tasks to Firestore: $e');
-              }
-            }
-          }
+          // New remote collection for this account: user starts clean with 0 tasks
+          _tasks = [];
+          await _saveToPrefs();
+          notifyListeners();
         } else {
-          // Update local tasks from Firestore documents
-          final remoteTasks = snapshot.docs.map((doc) {
-            final data = doc.data();
-            // Ensure ID is set
+          // Extract remote tasks, filtering and purging any dummy starter tasks if present
+          final remoteTasks = <Task>[];
+          final starterDocsToDelete = <String>[];
+
+          for (final doc in snapshot.docs) {
+            final data = Map<String, dynamic>.from(doc.data());
             if (!data.containsKey('id') || data['id'] == null) {
               data['id'] = doc.id;
             }
-            return Task.fromMap(data);
-          }).toList();
+            final task = Task.fromMap(data);
+            if (_isStarterDummyTask(task)) {
+              starterDocsToDelete.add(doc.id);
+            } else {
+              remoteTasks.add(task);
+            }
+          }
+
+          // Clean up dummy starter tasks from remote Firestore collection if found
+          if (starterDocsToDelete.isNotEmpty && _firestore != null) {
+            final batch = _firestore!.batch();
+            for (final docId in starterDocsToDelete) {
+              batch.delete(collection.doc(docId));
+            }
+            try {
+              await batch.commit();
+            } catch (e) {
+              debugPrint('Error cleaning up dummy tasks from Firestore: $e');
+            }
+          }
 
           // Sort tasks: pending first, then by date descending
           remoteTasks.sort((a, b) {
@@ -151,48 +165,11 @@ class TaskService extends ChangeNotifier {
     );
   }
 
-  List<Task> _getStarterTasks() {
-    final now = DateTime.now();
-    return [
-      Task(
-        id: '1',
-        title: 'إنجاز مهام العمل الرئيسية 💼',
-        description: 'التركيز على أولويات العمل والمهام اليومية.',
-        date: now,
-        isCompleted: true,
-        priority: TaskPriority.high,
-        category: 'عمل',
-        completedAt: now,
-        startTime: '09:00 ص',
-        endTime: '10:00 ص',
-        durationMinutes: 60,
-        actualDurationMinutes: 50,
-      ),
-      Task(
-        id: '2',
-        title: 'جلسة دراسة وتطوير مهارات 📚',
-        description: 'قراءة درس أو مراجعة مادة تعليمية بدون تشتت.',
-        date: now,
-        isCompleted: false,
-        priority: TaskPriority.high,
-        category: 'دراسة',
-        startTime: '10:30 ص',
-        endTime: '12:00 م',
-        durationMinutes: 90,
-      ),
-      Task(
-        id: '3',
-        title: 'ممارسة الرياضة والمشي 🏃‍♂️',
-        description: 'نشاط بدني للحفاظ على الصحة واللياقة والطاقة.',
-        date: now,
-        isCompleted: false,
-        priority: TaskPriority.medium,
-        category: 'صحة',
-        startTime: '05:00 م',
-        endTime: '06:00 م',
-        durationMinutes: 60,
-      ),
-    ];
+  static bool _isStarterDummyTask(Task t) {
+    return (t.id == '1' || t.id == '2' || t.id == '3') &&
+        (t.title.contains('إنجاز مهام العمل') ||
+            t.title.contains('جلسة دراسة') ||
+            t.title.contains('ممارسة الرياضة'));
   }
 
   Future<void> _saveToPrefs() async {
