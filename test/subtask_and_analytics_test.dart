@@ -55,6 +55,30 @@ void main() {
       expect(subToggled.subtasks.firstWhere((s) => s.id == 'sub1').isCompleted, isFalse);
       expect(subToggled.subtasks.firstWhere((s) => s.id == 'sub2').isCompleted, isTrue);
     });
+
+    test('updateSubTaskTitle edits subtask text properly', () async {
+      final service = TaskService();
+      final now = DateTime.now();
+      final task = Task(
+        id: 'task_sub_edit',
+        title: 'مهمة لتعديل المهمة الفرعية',
+        date: now,
+        durationMinutes: 120,
+        subtasks: [
+          SubTask(id: 'st_1', title: 'عنوان قديم', durationMinutes: 30, isCompleted: false),
+          SubTask(id: 'st_2', title: 'خطوة ثانية', durationMinutes: 30, isCompleted: false),
+        ],
+      );
+
+      await service.addTask(task);
+      expect(service.tasks.firstWhere((t) => t.id == 'task_sub_edit').subtasks.first.title, 'عنوان قديم');
+
+      // Edit title
+      await service.updateSubTaskTitle('task_sub_edit', 'st_1', 'عنوان معدل جديد');
+      final updatedTask = service.tasks.firstWhere((t) => t.id == 'task_sub_edit');
+      expect(updatedTask.subtasks.firstWhere((s) => s.id == 'st_1').title, 'عنوان معدل جديد');
+      expect(updatedTask.subtasks.firstWhere((s) => s.id == 'st_2').title, 'خطوة ثانية');
+    });
   });
 
   group('Date-specific Productivity Analytics Tests', () {

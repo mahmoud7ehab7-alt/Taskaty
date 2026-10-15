@@ -351,4 +351,35 @@ class TaskService extends ChangeNotifier {
       }
     }
   }
+
+  Future<void> updateSubTaskTitle(String taskId, String subTaskId, String newTitle) async {
+    final trimmedTitle = newTitle.trim();
+    if (trimmedTitle.isEmpty) return;
+
+    final taskIndex = _tasks.indexWhere((t) => t.id == taskId);
+    if (taskIndex == -1) return;
+
+    final task = _tasks[taskIndex];
+    final updatedSubtasks = task.subtasks.map((st) {
+      if (st.id == subTaskId) {
+        return st.copyWith(title: trimmedTitle);
+      }
+      return st;
+    }).toList();
+
+    final updatedTask = task.copyWith(subtasks: updatedSubtasks);
+
+    _tasks[taskIndex] = updatedTask;
+    notifyListeners();
+    await _saveToPrefs();
+
+    final collection = _userTasksCollection;
+    if (collection != null) {
+      try {
+        await collection.doc(taskId).set(updatedTask.toMap());
+      } catch (e) {
+        debugPrint('Error updating subtask title in Firestore: $e');
+      }
+    }
+  }
 }

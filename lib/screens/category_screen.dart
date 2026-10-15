@@ -840,6 +840,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
               onToggleSubTask: (subId) {
                 widget.taskService.toggleSubTask(task.id, subId);
               },
+              onEditSubTask: (subId, newTitle) {
+                widget.taskService.updateSubTaskTitle(task.id, subId, newTitle);
+              },
               onDelete: () {
                 widget.taskService.deleteTask(task.id);
               },

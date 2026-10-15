@@ -9,6 +9,7 @@ class TaskItem extends StatefulWidget {
   final VoidCallback onDelete;
   final VoidCallback? onEdit;
   final Function(String subTaskId)? onToggleSubTask;
+  final Function(String subTaskId, String newTitle)? onEditSubTask;
   final VoidCallback? onEditActualDuration;
 
   const TaskItem({
@@ -18,6 +19,7 @@ class TaskItem extends StatefulWidget {
     required this.onDelete,
     this.onEdit,
     this.onToggleSubTask,
+    this.onEditSubTask,
     this.onEditActualDuration,
   });
 
@@ -32,6 +34,70 @@ class _TaskItemState extends State<TaskItem> {
   void initState() {
     super.initState();
     _isExpanded = !widget.task.isCompleted && widget.task.subtasks.isNotEmpty;
+  }
+
+  Future<void> _showEditSubTaskDialog(BuildContext context, SubTask sub) async {
+    final controller = TextEditingController(text: sub.title);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Theme.of(ctx).cardTheme.color ?? (isDark ? const Color(0xFF132A32) : Colors.white),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.edit_note_rounded, color: AppTheme.primaryColor, size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Text('تعديل المهمة الفرعية', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 150,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (val) {
+              final trimmed = val.trim();
+              if (trimmed.isNotEmpty) {
+                Navigator.pop(ctx, trimmed);
+              }
+            },
+            decoration: InputDecoration(
+              hintText: 'عنوان المهمة الفرعية...',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final trimmed = controller.text.trim();
+                if (trimmed.isNotEmpty) {
+                  Navigator.pop(ctx, trimmed);
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null && result.isNotEmpty && result != sub.title) {
+      widget.onEditSubTask?.call(sub.id, result);
+    }
   }
 
   Color _getPriorityColor(TaskPriority priority) {
@@ -575,6 +641,9 @@ class _TaskItemState extends State<TaskItem> {
                               onTap: widget.onToggleSubTask != null
                                   ? () => widget.onToggleSubTask!(sub.id)
                                   : null,
+                              onLongPress: widget.onEditSubTask != null
+                                  ? () => _showEditSubTaskDialog(context, sub)
+                                  : null,
                               borderRadius: BorderRadius.circular(10),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -672,6 +741,26 @@ class _TaskItemState extends State<TaskItem> {
                                         );
                                       },
                                     ),
+
+                                    // Edit subtask text button
+                                    if (widget.onEditSubTask != null) ...[
+                                      const SizedBox(width: 4),
+                                      InkWell(
+                                        onTap: () => _showEditSubTaskDialog(context, sub),
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(3.0),
+                                          child: Tooltip(
+                                            message: 'تعديل المهمة الفرعية',
+                                            child: Icon(
+                                              Icons.edit_outlined,
+                                              size: 14,
+                                              color: isDark ? Colors.white54 : Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

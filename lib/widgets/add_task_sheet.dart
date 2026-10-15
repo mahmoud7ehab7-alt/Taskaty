@@ -243,6 +243,73 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
     );
   }
 
+  Future<void> _editSubtaskTitle(int index) async {
+    final sub = _subtasks[index];
+    final controller = TextEditingController(text: sub.title);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: Theme.of(ctx).cardTheme.color ?? (isDark ? const Color(0xFF132A32) : Colors.white),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.edit_note_rounded, color: AppTheme.primaryColor, size: 22),
+              ),
+              const SizedBox(width: 10),
+              const Text('تعديل المهمة الفرعية', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 150,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (val) {
+              final trimmed = val.trim();
+              if (trimmed.isNotEmpty) {
+                Navigator.pop(ctx, trimmed);
+              }
+            },
+            decoration: InputDecoration(
+              hintText: 'عنوان المهمة الفرعية...',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final trimmed = controller.text.trim();
+                if (trimmed.isNotEmpty) {
+                  Navigator.pop(ctx, trimmed);
+                }
+              },
+              child: const Text('حفظ'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null && result.isNotEmpty && mounted) {
+      setState(() {
+        _subtasks[index] = sub.copyWith(title: result);
+      });
+    }
+  }
+
   Future<void> _pickSubTaskDuration(int index) async {
     final current = _subtasks[index].durationMinutes;
     final result = await showModalBottomSheet<int?>(
@@ -1001,6 +1068,8 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
                         return ListTile(
                           dense: true,
                           visualDensity: VisualDensity.compact,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          onTap: () => _editSubtaskTitle(idx),
                           leading: InkWell(
                             onTap: () {
                               setState(() {
@@ -1067,9 +1136,18 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 2),
+                              // Edit text button
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, size: 16),
+                                tooltip: 'تعديل المهمة الفرعية',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => _editSubtaskTitle(idx),
+                              ),
                               IconButton(
                                 icon: const Icon(Icons.close, size: 16),
+                                tooltip: 'حذف',
+                                visualDensity: VisualDensity.compact,
                                 onPressed: () {
                                   setState(() {
                                     _subtasks.removeAt(idx);
